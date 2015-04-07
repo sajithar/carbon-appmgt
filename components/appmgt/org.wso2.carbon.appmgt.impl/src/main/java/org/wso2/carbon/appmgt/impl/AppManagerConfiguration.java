@@ -27,6 +27,8 @@ import org.wso2.carbon.appmgt.api.model.APIStore;
 import org.wso2.carbon.appmgt.impl.dto.Environment;
 import org.wso2.carbon.appmgt.impl.idp.sso.SSOConfiguratorConstants;
 import org.wso2.carbon.appmgt.impl.idp.sso.model.SSOEnvironment;
+import org.wso2.carbon.appmgt.impl.provisioning.OutboundProvisioningManager;
+import org.wso2.carbon.appmgt.impl.provisioning.ProvisioningException;
 import org.wso2.securevault.SecretResolver;
 import org.wso2.securevault.SecretResolverFactory;
 
@@ -35,7 +37,14 @@ import javax.xml.stream.XMLStreamException;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.Stack;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -105,6 +114,16 @@ public class AppManagerConfiguration {
         if (value == null) {
             return null;
         }
+
+        OutboundProvisioningManager obpm = new OutboundProvisioningManager();
+        System.out.println(obpm.getAllRegisteredConnectorClasses());
+        System.out.println(obpm.getAllRegisteredConnectors().toString());
+        try {
+            obpm.provision(null, null, "dummy");
+        } catch (ProvisioningException e) {
+            e.printStackTrace();
+        }
+
         return value.get(0);
     }
     
