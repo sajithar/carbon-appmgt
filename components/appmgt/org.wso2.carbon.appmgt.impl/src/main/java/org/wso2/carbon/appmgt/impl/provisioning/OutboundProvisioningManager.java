@@ -66,7 +66,7 @@ public class OutboundProvisioningManager {
                                             + "' cannot be located", e);
         }
 
-        if (!AbstractOutboundProvisioningConnector.class.isAssignableFrom(connectorClass)) {
+        if (!connectorClass.isAssignableFrom(AbstractOutboundProvisioningConnector.class)) {
             log.error("Connector class '" + connectorClassName
                       + "' is not a valid outbound provisioning connector");
             throw new ProvisioningException("Connector class '" + connectorClassName
@@ -107,6 +107,7 @@ public class OutboundProvisioningManager {
         }
 
         return (AbstractOutboundProvisioningConnector) connector;
+
     }
 
     public List<String> getAllRegisteredConnectors() {
