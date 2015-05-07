@@ -1,23 +1,24 @@
 /*
-*Copyright (c) 2005-2012, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
-*
-*WSO2 Inc. licenses this file to you under the Apache License,
-*Version 2.0 (the "License"); you may not use this file except
-*in compliance with the License.
-*You may obtain a copy of the License at
-*
-*http://www.apache.org/licenses/LICENSE-2.0
-*
-*Unless required by applicable law or agreed to in writing,
-*software distributed under the License is distributed on an
-*"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-*KIND, either express or implied.  See the License for the
-*specific language governing permissions and limitations
-*under the License.
-*/
+ * Copyright (c) 2005-2012, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
+ * 
+ * WSO2 Inc. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
 package org.wso2.carbon.appmgt.impl.token;
 
-
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.appmgt.api.AppManagementException;
 import org.wso2.carbon.appmgt.impl.internal.ServiceReferenceHolder;
 import org.wso2.carbon.appmgt.impl.utils.AppManagerUtil;
@@ -26,12 +27,15 @@ import org.wso2.carbon.appmgt.impl.utils.UserClaims;
 import org.wso2.carbon.base.MultitenantConstants;
 import org.wso2.carbon.user.api.ClaimMapping;
 import org.wso2.carbon.user.api.ClaimManager;
+import org.wso2.carbon.user.api.UserRealm;
 import org.wso2.carbon.user.api.UserStoreException;
 import org.wso2.carbon.user.api.UserStoreManager;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 
 import javax.cache.Cache;
 import javax.cache.Caching;
+
+import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
@@ -43,82 +47,142 @@ import java.util.TreeMap;
  * app-manager.xml -> APIConsumerAuthentication -> ClaimsRetrieverImplClass
  */
 public class DefaultClaimsRetriever implements ClaimsRetriever {
-    //TODO refactor caching implementation
+	// TODO refactor caching implementation
 
-    private String dialectURI = ClaimsRetriever.DEFAULT_DIALECT_URI;
-    private Cache claimsLocalCache;
+	private static final Log log = LogFactory.getLog(DefaultClaimsRetriever.class);
+	private String dialectURI = ClaimsRetriever.DEFAULT_DIALECT_URI;
+	private Cache<Object, Object> claimsLocalCache;
 
-    /**
-     * Reads the DialectURI of the ClaimURIs to be retrieved from app-manager.xml ->
-     * APIConsumerAuthentication -> ConsumerDialectURI.
-     * If not configured it uses http://wso2.org/claims as default
-     */
+	/**
+	 * Reads the DialectURI of the ClaimURIs to be retrieved from
+	 * app-manager.xml ->
+	 * APIConsumerAuthentication -> ConsumerDialectURI.
+	 * If not configured it uses http://wso2.org/claims as default
+	 */
+	@Override
     public void init() {
-        dialectURI = ServiceReferenceHolder.getInstance().getAPIManagerConfigurationService().
-                getAPIManagerConfiguration().getFirstProperty(CONSUMER_DIALECT_URI);
-        claimsLocalCache = getClaimsLocalCache();
-        if (dialectURI == null) {
-            dialectURI = ClaimsRetriever.DEFAULT_DIALECT_URI;
-        }
-    }
+		dialectURI =
+		             ServiceReferenceHolder.getInstance().getAPIManagerConfigurationService()
+		                                   .getAPIManagerConfiguration()
+		                                   .getFirstProperty(CONSUMER_DIALECT_URI);
+		claimsLocalCache = getClaimsLocalCache();
+		if (dialectURI == null) {
+			dialectURI = ClaimsRetriever.DEFAULT_DIALECT_URI;
+		}
+	}
 
-    protected Cache getClaimsLocalCache() {
-        return Caching.getCacheManager("API_MANAGER_CACHE").getCache("claimsLocalCache");
-    }
+	protected Cache<Object, Object> getClaimsLocalCache() {
+		return Caching.getCacheManager("API_MANAGER_CACHE").getCache("claimsLocalCache");
+	}
 
+	@Override
     public SortedMap<String, String> getClaims(String endUserName) throws AppManagementException {
-        SortedMap<String, String> claimValues;
-        try {
-            int tenantId = AppManagerUtil.getTenantId(endUserName);
-            //check in local cache
-            String key = endUserName + ":" + tenantId;
-            ClaimCacheKey cacheKey = new ClaimCacheKey(key);
-            //Object result = claimsLocalCache.getValueFromCache(cacheKey);
-            Object result = claimsLocalCache.get(cacheKey);
-            if (result != null) {
-                claimValues = ((UserClaims) result).getClaimValues();
-            } else {
-                ClaimManager claimManager = ServiceReferenceHolder.getInstance().getRealmService().
-                        getTenantUserRealm(tenantId).getClaimManager();
-                //Claim[] claims = claimManager.getAllClaims(dialectURI);
-                ClaimMapping[] claims = claimManager.getAllClaimMappings(dialectURI);
-                String[] claimURIs = claimMappingtoClaimURIString(claims);
-                UserStoreManager userStoreManager = ServiceReferenceHolder.getInstance().getRealmService().
-                        getTenantUserRealm(tenantId).getUserStoreManager();
+		SortedMap<String, String> claimValues;
+		try {
+			int tenantId = AppManagerUtil.getTenantId(endUserName);
+			// check in local cache
+			String key = endUserName + ":" + tenantId;
+			ClaimCacheKey cacheKey = new ClaimCacheKey(key);
+			// Object result = claimsLocalCache.getValueFromCache(cacheKey);
+			Object result = claimsLocalCache.get(cacheKey);
+			if (result != null) {
+				claimValues = ((UserClaims) result).getClaimValues();
+			} else {
+				ClaimManager claimManager =
+				                            ServiceReferenceHolder.getInstance().getRealmService()
+				                                                  .getTenantUserRealm(tenantId)
+				                                                  .getClaimManager();
+				// Claim[] claims = claimManager.getAllClaims(dialectURI);
+				ClaimMapping[] claims = claimManager.getAllClaimMappings(dialectURI);
+				String[] claimURIs = claimMappingtoClaimURIString(claims);
+				UserStoreManager userStoreManager =
+				                                    ServiceReferenceHolder.getInstance()
+				                                                          .getRealmService()
+				                                                          .getTenantUserRealm(tenantId)
+				                                                          .getUserStoreManager();
 
-                String tenantAwareUserName = endUserName;
-                if(MultitenantConstants.SUPER_TENANT_ID != tenantId){
-                    tenantAwareUserName = MultitenantUtils.getTenantAwareUsername(endUserName);
-                }
-                claimValues = new TreeMap(userStoreManager.getUserClaimValues(tenantAwareUserName, claimURIs, null));
-                UserClaims userClaims = new UserClaims(claimValues);
-                //add to cache
-                claimsLocalCache.put(cacheKey, userClaims);
-            }
-        } catch (UserStoreException e) {
-            throw new AppManagementException("Error while retrieving user claim values from "
-                    + "user store");
-        }
-        return claimValues;
-    }
+				String tenantAwareUserName = endUserName;
+				if (MultitenantConstants.SUPER_TENANT_ID != tenantId) {
+					tenantAwareUserName = MultitenantUtils.getTenantAwareUsername(endUserName);
+				}
+				claimValues =
+				              new TreeMap(userStoreManager.getUserClaimValues(tenantAwareUserName,
+				                                                              claimURIs, null));
+				UserClaims userClaims = new UserClaims(claimValues);
+				// add to cache
+				claimsLocalCache.put(cacheKey, userClaims);
+			}
+		} catch (UserStoreException e) {
+			throw new AppManagementException("Error while retrieving user claim values from "
+			                                 + "user store");
+		}
+		return claimValues;
+	}
 
-    /**
-     * Always returns the ConsumerDialectURI configured in app-manager.xml
-     */
+	public SortedMap<String, String> getClaims(String endUserName, String dialectURI)
+	                                                                                 throws AppManagementException {
+		int tenantId = AppManagerUtil.getTenantId(endUserName);
+
+		String key = endUserName + ":" + tenantId + ":" + dialectURI;
+		ClaimCacheKey cacheKey = new ClaimCacheKey(key);
+		// check in local cache
+		Object result = claimsLocalCache.get(cacheKey);
+		if (result != null) {
+			// return chached values
+			return ((UserClaims) result).getClaimValues();
+		}
+
+		SortedMap<String, String> claims;
+		UserRealm userRealm;
+		try {
+			userRealm =
+			            ServiceReferenceHolder.getInstance().getRealmService()
+			                                  .getTenantUserRealm(tenantId);
+			ClaimManager claimManager = userRealm.getClaimManager();
+			ClaimMapping[] claimMappings = claimManager.getAllClaimMappings(dialectURI);
+			String[] claimURIs = claimMappingtoClaimURIString(claimMappings);
+			UserStoreManager userStoreManager = userRealm.getUserStoreManager();
+
+			String tenantAwareUserName = endUserName;
+			if (MultitenantConstants.SUPER_TENANT_ID != tenantId) {
+				tenantAwareUserName = MultitenantUtils.getTenantAwareUsername(endUserName);
+			}
+			Map<String, String> tmp =
+			                          userStoreManager.getUserClaimValues(tenantAwareUserName,
+			                                                              claimURIs, null);
+			claims = new TreeMap<String, String>(tmp);
+		} catch (UserStoreException e) {
+			String msg = "Error while retrieving user claim values from user store";
+			log.error(msg, e);
+			throw new AppManagementException(msg, e);
+		}
+
+		// add to cache
+		UserClaims userClaims = new UserClaims(claims);
+		claimsLocalCache.put(cacheKey, userClaims);
+
+		return claims;
+	}
+
+	/**
+	 * Always returns the ConsumerDialectURI configured in app-manager.xml
+	 */
+	@Override
     public String getDialectURI(String endUserName) {
-        return dialectURI;
-    }
+		return dialectURI;
+	}
 
-    /**
-     * Helper method to convert array of <code>Claim</code> object to
-     * array of <code>String</code> objects corresponding to the ClaimURI values.
-     */
-    private String[] claimMappingtoClaimURIString(ClaimMapping[] claims) {
-        String[] temp = new String[claims.length];
-        for (int i = 0; i < claims.length; i++) {
-            temp[i] = claims[i].getClaim().getClaimUri().toString();
-       
-        }
-        return temp;
-    }
+	/**
+	 * Helper method to convert array of <code>Claim</code> object to
+	 * array of <code>String</code> objects corresponding to the ClaimURI
+	 * values.
+	 */
+	private String[] claimMappingtoClaimURIString(ClaimMapping[] claimMappings) {
+		String[] temp = new String[claimMappings.length];
+		for (int i = 0; i < claimMappings.length; i++) {
+			temp[i] = claimMappings[i].getClaim().getClaimUri().toString();
+
+		}
+		return temp;
+	}
 }

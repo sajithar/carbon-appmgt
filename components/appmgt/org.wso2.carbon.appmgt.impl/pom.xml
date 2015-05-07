@@ -202,6 +202,13 @@
           <version>4.2.1</version>
       </dependency>
 
+	<!-- Provisioning -->
+	<dependency>
+		<groupId>org.wso2.carbon</groupId>
+		<artifactId>org.wso2.carbon.identity.provisioning</artifactId>
+		<version>4.2.0</version>
+	</dependency>
+
     </dependencies>
     <build>
         <plugins>
